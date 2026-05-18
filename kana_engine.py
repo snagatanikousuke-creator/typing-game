@@ -217,7 +217,7 @@ class KanaInputState:
         self.segments = self._split_to_segments(word)  # ["に","ほ","ん","ご"]
         self.seg_index = 0      # 今何文字目か
         self.current_input = "" # 現在の文字に対して入力中のローマ字
-        self.missed_keys: list[str] = []  # ミスしたキー記録
+        self.missed_keys = []  # ミスしたキー記録
 
     def _split_to_segments(self, word: str) -> list[str]:
         """
@@ -242,7 +242,7 @@ class KanaInputState:
             return self.segments[self.seg_index]
         return None
 
-    def is_complete(self) -> bool:
+    def is_complete(self):
         return self.seg_index >= len(self.segments)
 
     def input_key(self, key: str) -> str:
@@ -274,20 +274,31 @@ class KanaInputState:
                     else:
                         return "correct"
 
-        # っの特殊処理: 次の文字の子音を2回打つパターン（例: っか → kka）
-        if seg == "っ" and self.seg_index + 1 < len(self.segments):
+        # っの特殊処理: 次の文字の先頭子音を2回打つパターン（例: っか → kka）
+        if seg == "っ" and self.current_input == "" and self.seg_index + 1 < len(self.segments):
             next_seg = self.segments[self.seg_index + 1]
             next_data = KANA_DATA.get(next_seg)
             if next_data:
-                for pattern in next_data["patterns"]:
-                    if pattern and key == pattern[0]:
-                        # っ確定、次の文字の入力開始
-                        self.missed_keys  # 記録なし（正解）
+                first_chars = {p[0] for p in next_data["patterns"] if p}
+                if key in first_chars:
+                    # っ確定 → 次の文字へ移動し、そのキーをcurrent_inputとして引き継ぐ
+                    self.seg_index += 1
+                    seg = self.segments[self.seg_index]
+                    data = KANA_DATA[seg]
+                    self.current_input = key
+                    if key in data["patterns"]:
+                        self.current_input = ""
                         self.seg_index += 1
-                        self.current_input = key
                         return "correct"
+                    return "pending"
 
-        new_input = self.current_input + key
+        # っ引き継ぎ後はcurrent_input=key（例: "k"）の状態で次のkeyが来る
+        # その場合 current_input+key = "kk" になってしまうので、
+        # current_inputが1文字かつkeyと同じ = 引き継ぎ直後 → new_input = key のみ
+        if len(self.current_input) == 1 and self.current_input == key:
+            new_input = key
+        else:
+            new_input = self.current_input + key
 
         # 完全一致チェック
         if new_input in data["patterns"]:
