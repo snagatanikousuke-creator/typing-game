@@ -258,21 +258,23 @@ class KanaInputState:
         if data is None:
             return "miss"
 
-        # ん の特殊処理: n + 次の文字の子音 で確定（例: んご → ngo の n で確定）
+        # ん の特殊処理
         if seg == "ん" and self.current_input == "n":
+            # ① nn で確定（単語末尾 or 次がな行・あ行のとき）
+            if key == "n":
+                self.current_input = ""
+                self.seg_index += 1
+                return "correct"
+            # ② n + 子音 で確定（例: んご → ngo の n で確定）
             next_seg = self.segments[self.seg_index + 1] if self.seg_index + 1 < len(self.segments) else None
             if next_seg:
                 next_data = KANA_DATA.get(next_seg)
-                # 次の文字の先頭が n 以外の子音なら「ん」確定
-                if next_data and key != "n" and key != "a" and key != "i" and key != "u" and key != "e" and key != "o":
+                VOWELS = {"a", "i", "u", "e", "o"}
+                if next_data and key not in VOWELS:
                     self.current_input = ""
                     self.seg_index += 1
-                    # そのキーを次の文字の入力として再処理
                     self.current_input = key
-                    if key in KANA_DATA.get(next_seg, {}).get("prefixes", set()):
-                        return "correct"  # んが確定（次の文字はまだpending）
-                    else:
-                        return "correct"
+                    return "correct"
 
         # っの特殊処理: 次の文字の先頭子音を2回打つパターン（例: っか → kka）
         if seg == "っ" and self.current_input == "" and self.seg_index + 1 < len(self.segments):
